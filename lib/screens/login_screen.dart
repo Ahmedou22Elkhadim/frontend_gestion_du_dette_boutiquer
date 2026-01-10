@@ -1,0 +1,261 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import 'signup_screen.dart';
+import 'client_dashboard_screen.dart';
+import 'boutiquer_dashboard_screen.dart';
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  bool _isObscure = true;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _submit() async {
+    if (_formKey.currentState!.validate()) {
+      final success = await Provider.of<AuthProvider>(
+        context,
+        listen: false,
+      ).login(_phoneController.text, _passwordController.text);
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Connexion réussie!')));
+
+        // Navigate to dashboard based on role? For now assume client as requested
+        final role = Provider.of<AuthProvider>(context, listen: false).userRole;
+
+        if (role == 'boutiquier' || role == 'boutiquer') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const BoutiquerDashboardScreen(),
+            ),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ClientDashboardScreen(),
+            ),
+          );
+        }
+      } else if (mounted) {
+        final error = Provider.of<AuthProvider>(
+          context,
+          listen: false,
+        ).errorMessage;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error ?? 'Erreur inconnue')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Placeholder for a logo or image if needed
+                  // const SizedBox(height: 50),
+
+                  // Phone Input
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withAlpha(50),
+                          spreadRadius: 2,
+                          blurRadius: 5,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Nummero de téléphone', // Empty hint as per visual style
+                        prefixIcon: Icon(
+                          Icons.phone_outlined,
+                          color: Colors.black54,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 15),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Veuillez entrer votre numéro';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Password Input
+                  // Simulating the "4 squares" or just a clean password field
+                  // Choosing a clean password field matching the phone input style
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withAlpha(50),
+                          spreadRadius: 2,
+                          blurRadius: 5,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: TextFormField(
+                      controller: _passwordController,
+                      obscureText: _isObscure,
+                      decoration: InputDecoration(
+                        hintText: 'Mot de passe', // Placeholder
+                        prefixIcon: const Icon(
+                          Icons.lock_outline,
+                          color: Colors.black54,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isObscure
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isObscure = !_isObscure;
+                            });
+                          },
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 15,
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Veuillez entrer votre mot de passe';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // Login Button
+                  Consumer<AuthProvider>(
+                    builder: (context, auth, child) {
+                      return auth.isLoading
+                          ? const CircularProgressIndicator()
+                          : SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: _submit,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(
+                                    0xFF4CAF50,
+                                  ), // Green color
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  elevation: 5,
+                                ),
+                                child: const Text(
+                                  'Connexion',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Forgot Password
+                  TextButton(
+                    onPressed: () {
+                      // Handle forgot password
+                    },
+                    child: const Text(
+                      'Mot de passe oublié',
+                      style: TextStyle(color: Colors.black54, fontSize: 14),
+                    ),
+                  ),
+
+                  // Sign Up
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Nouvel utilisateur ? ',
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SignupScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          "S'inscrire maintenant",
+                          style: TextStyle(
+                            color: Color(
+                              0xFF8D6E63,
+                            ), // Brownish color from image
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
