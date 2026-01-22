@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:karnet_deyn/screens/login_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-
+import '../providers/language_provider.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -34,12 +34,12 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   void _submit() async {
+    final language = Provider.of<LanguageProvider>(context, listen: false);
+
     if (_formKey.currentState!.validate()) {
       if (_passwordController.text != _confirmPasswordController.text) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Les mots de passe ne correspondent pas'),
-          ),
+          SnackBar(content: Text(language.getText('password_mismatch'))),
         );
         return;
       }
@@ -54,16 +54,14 @@ class _SignupScreenState extends State<SignupScreen> {
           );
 
       if (success && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Inscription réussie!')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(language.getText('registration_success'))),
+        );
 
-        if (_selectedRole == 'client' || _selectedRole == 'boutiquer') {
+        if (_selectedRole == 'client' || _selectedRole == 'boutiquier') {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => const LoginScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
           );
         } else {
           Navigator.pop(
@@ -91,10 +89,12 @@ class _SignupScreenState extends State<SignupScreen> {
     VoidCallback? onToggleVisibility,
     TextInputType type = TextInputType.text,
   }) {
+    final language = Provider.of<LanguageProvider>(context);
+
     return FormField<String>(
       validator: (value) {
         if (controller.text.isEmpty) {
-          return 'Ce champ est requis';
+          return language.getText('required_field');
         }
         return null;
       },
@@ -167,206 +167,209 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+    final language = Provider.of<LanguageProvider>(context);
+    final isRtl = language.locale.languageCode == 'ar';
+
+    return Directionality(
+      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    "Inscription",
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-
-                  // Name Input
-                  _buildInput(
-                    _nameController,
-                    "Nom complet",
-                    Icons.person_outline,
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Phone Input
-                  _buildInput(
-                    _phoneController,
-                    "Téléphone",
-                    Icons.payment,
-                    type: TextInputType.phone,
-                  ), // User used 'credit card' icon in mockup for second field, likely for ID or Phone. Keeping phone logic but matching icon loosely or sticking to logic? Let's use logic: payment icon looks like the card in mockup.
-                  const SizedBox(height: 15),
-
-                   _buildInput(
-                    _emailController,
-                    "Email",
-                    Icons.email,
-                    type: TextInputType.phone,
-                  ), // User used 'credit card' icon in mockup for second field, likely for ID or Phone. Keeping phone logic but matching icon loosely or sticking to logic? Let's use logic: payment icon looks like the card in mockup.
-                  const SizedBox(height: 15),
-
-                  // Password Input
-                  _buildInput(
-                    _passwordController,
-                    "Mot de passe",
-                    Icons.lock_outline,
-                    isPassword: true,
-                    obscureText: _isObscure,
-                    onToggleVisibility: () {
-                      setState(() {
-                        _isObscure = !_isObscure;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 15),
-
-                  // Confirm Password
-                  _buildInput(
-                    _confirmPasswordController,
-                    "Confirmer mot de passe",
-                    Icons.lock_outline,
-                    isPassword: true,
-                    obscureText: _isConfirmObscure,
-                    onToggleVisibility: () {
-                      setState(() {
-                        _isConfirmObscure = !_isConfirmObscure;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 25),
-
-                  // Role Selection (En bas, as requested)
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "Je suis un :",
-                      style: TextStyle(
-                        fontSize: 16,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      language.getText('signup_title'),
+                      style: const TextStyle(
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black54,
+                        color: Colors.black87,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _selectedRole = 'client'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == 'client'
-                                  ? const Color(0xFF4CAF50)
-                                  : Colors.grey[200],
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
+                    const SizedBox(height: 30),
+
+                    // Name Input
+                    _buildInput(
+                      _nameController,
+                      language.getText('full_name'),
+                      Icons.person_outline,
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Phone Input
+                    _buildInput(
+                      _phoneController,
+                      language.getText('phone_hint'),
+                      Icons.payment,
+                      type: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 15),
+
+                    _buildInput(
+                      _emailController,
+                      language.getText('email'),
+                      Icons.email,
+                      type: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Password Input
+                    _buildInput(
+                      _passwordController,
+                      language.getText('password_hint'),
+                      Icons.lock_outline,
+                      isPassword: true,
+                      obscureText: _isObscure,
+                      onToggleVisibility: () {
+                        setState(() {
+                          _isObscure = !_isObscure;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Confirm Password
+                    _buildInput(
+                      _confirmPasswordController,
+                      language.getText('confirm_password'),
+                      Icons.lock_outline,
+                      isPassword: true,
+                      obscureText: _isConfirmObscure,
+                      onToggleVisibility: () {
+                        setState(() {
+                          _isConfirmObscure = !_isConfirmObscure;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 25),
+
+                    // Role Selection
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        language.getText('i_am_a'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                setState(() => _selectedRole = 'client'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
                                 color: _selectedRole == 'client'
                                     ? const Color(0xFF4CAF50)
-                                    : Colors.transparent,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                "Client",
-                                style: TextStyle(
+                                    : Colors.grey[200],
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
                                   color: _selectedRole == 'client'
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.bold,
+                                      ? const Color(0xFF4CAF50)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  language.getText('client'),
+                                  style: TextStyle(
+                                    color: _selectedRole == 'client'
+                                        ? Colors.white
+                                        : Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () =>
-                              setState(() => _selectedRole = 'boutiquier'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == 'boutiquier'
-                                  ? const Color(0xFF4CAF50)
-                                  : Colors.grey[200],
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                setState(() => _selectedRole = 'boutiquier'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
                                 color: _selectedRole == 'boutiquier'
                                     ? const Color(0xFF4CAF50)
-                                    : Colors.transparent,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                "Boutiquier",
-                                style: TextStyle(
+                                    : Colors.grey[200],
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
                                   color: _selectedRole == 'boutiquier'
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.bold,
+                                      ? const Color(0xFF4CAF50)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  language.getText('boutiquier'),
+                                  style: TextStyle(
+                                    color: _selectedRole == 'boutiquier'
+                                        ? Colors.white
+                                        : Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 30),
+                      ],
+                    ),
+                    const SizedBox(height: 30),
 
-                  // Sign Up Button
-                  Consumer<AuthProvider>(
-                    builder: (context, auth, child) {
-                      return auth.isLoading
-                          ? const CircularProgressIndicator()
-                          : SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: _submit,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(
-                                    0xFF66BB6A,
-                                  ), // Lighter green as per mockup
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      10,
-                                    ), // Less rounded than login based on mockup
+                    // Sign Up Button
+                    Consumer<AuthProvider>(
+                      builder: (context, auth, child) {
+                        return auth.isLoading
+                            ? const CircularProgressIndicator()
+                            : SizedBox(
+                                width: double.infinity,
+                                height: 50,
+                                child: ElevatedButton(
+                                  onPressed: _submit,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF66BB6A),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    elevation: 5,
                                   ),
-                                  elevation: 5,
-                                ),
-                                child: const Text(
-                                  "S'INSCRIRE",
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                  child: Text(
+                                    language.getText('register_button'),
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                              );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             ),
           ),
