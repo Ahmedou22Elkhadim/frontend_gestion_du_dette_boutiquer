@@ -1,3 +1,4 @@
+// screens/login_screen.dart - Version corrigée
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -38,7 +39,6 @@ class _LoginScreenState extends State<LoginScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Connexion réussie!')));
 
-        // Navigate to dashboard based on role? For now assume client as requested
         final role = Provider.of<AuthProvider>(context, listen: false).userRole;
 
         if (role == 'boutiquier' || role == 'boutiquer') {
@@ -86,9 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Placeholder for a logo or image if needed
-                    // const SizedBox(height: 50),
-
                     // Phone Input
                     Container(
                       decoration: BoxDecoration(
@@ -108,9 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(
-                          hintText: language.getText(
-                            'phone_hint',
-                          ), // Localized hint
+                          hintText: language.getText('phone_hint'),
                           prefixIcon: const Icon(
                             Icons.phone_outlined,
                             color: Colors.black54,
@@ -149,9 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _passwordController,
                         obscureText: _isObscure,
                         decoration: InputDecoration(
-                          hintText: language.getText(
-                            'password_hint',
-                          ), // Localized
+                          hintText: language.getText('password_hint'),
                           prefixIcon: const Icon(
                             Icons.lock_outline,
                             color: Colors.black54,
@@ -196,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(
                                       0xFF4CAF50,
-                                    ), // Green color
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(30),
                                     ),
@@ -230,9 +223,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
-                    // Sign Up
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    // ✅ CORRECTION ICI - Utiliser Wrap au lieu de Row pour éviter l'overflow
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
                           '${language.getText('new_user')} ',
@@ -253,16 +247,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(
                             language.getText('register_now'),
                             style: const TextStyle(
-                              color: Color(
-                                0xFF8D6E63,
-                              ), // Brownish color from image
+                              color: Color(0xFF8D6E63),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
                       ],
                     ),
+                    
                     const SizedBox(height: 20),
+                    
                     // Language Toggle
                     IconButton(
                       icon: const Icon(Icons.language, color: Colors.black54),

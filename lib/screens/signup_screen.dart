@@ -3,6 +3,7 @@ import 'package:karnet_deyn/screens/login_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/language_provider.dart';
+import 'otp_verification_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -44,35 +45,27 @@ class _SignupScreenState extends State<SignupScreen> {
         return;
       }
 
-      final success = await Provider.of<AuthProvider>(context, listen: false)
-          .register(
-            _nameController.text,
-            _phoneController.text,
-            _passwordController.text,
-            _selectedRole,
-            _emailController.text,
-          );
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final success = await authProvider.register(
+        _nameController.text,
+        _phoneController.text,
+        _passwordController.text,
+        _selectedRole,
+        _emailController.text,
+      );
 
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(language.getText('registration_success'))),
-        );
-
-        if (_selectedRole == 'client' || _selectedRole == 'boutiquier') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-          );
-        } else {
-          Navigator.pop(
-            context,
-          ); // Go back to login for boutiquier or handle differently
-        }
-      } else if (mounted) {
-        final error = Provider.of<AuthProvider>(
+        // Rediriger vers l'écran de vérification OTP
+        Navigator.push(
           context,
-          listen: false,
-        ).errorMessage;
+          MaterialPageRoute(
+            builder: (context) => OTPVerificationScreen(
+              phoneNumber: _phoneController.text,
+            ),
+          ),
+        );
+      } else if (mounted) {
+        final error = authProvider.errorMessage;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(error ?? 'Erreur inconnue')));
