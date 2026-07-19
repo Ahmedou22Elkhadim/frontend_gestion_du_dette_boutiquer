@@ -1,40 +1,89 @@
+// providers/shop_provider.dart
 import 'package:flutter/material.dart';
-
-class Shop {
-  final String id;
-  final String name;
-  final String phone;
-  final String date;
-  final Color color; // For the avatar background
-
-  Shop({
-    required this.id,
-    required this.name,
-    required this.phone,
-    required this.date,
-    this.color = const Color(0xFFC5A39F), // Default dusty pink from UI
-  });
-}
+import 'auth_provider.dart';
 
 class ShopProvider with ChangeNotifier {
-  final List<Shop> _shops = [
-    Shop(id: '1', name: 'Sidi Abdi', phone: '22010203', date: '12-11-25'),
-    Shop(id: '2', name: 'Sidi Abdi', phone: '22010203', date: '12-11-25'),
-    Shop(
-      id: '3',
-      name: 'Ahmedou Shop',
-      phone: '33445566',
-      date: '13-11-25',
-      color: Colors.blueGrey,
-    ),
-  ];
+  List<dynamic> _shops = [];
+  List<dynamic> _clients = [];
+  Map<String, dynamic>? _stats;
+  bool _isLoading = false;
 
-  List<Shop> get shops => _shops;
+  List<dynamic> get shops => _shops;
+  List<dynamic> get clients => _clients;
+  Map<String, dynamic>? get stats => _stats;
+  bool get isLoading => _isLoading;
 
-  // Simulate fetching shops
-  Future<void> fetchShops() async {
-    // API call would go here
-    await Future.delayed(const Duration(seconds: 1));
+  Future<void> fetchShops(AuthProvider authProvider) async {
+    if (!authProvider.isAuthenticated) return;
+    
+    // 🔥 Éviter les appels pendant le build
+    await Future.microtask(() {
+      _isLoading = true;
+      notifyListeners();
+    });
+    
+    try {
+      final boutiques = await authProvider.getClientBoutiques();
+      
+      // 🔥 Utiliser Future.microtask pour éviter l'erreur
+      await Future.microtask(() {
+        _shops = boutiques;
+        _isLoading = false;
+        notifyListeners();
+      });
+    } catch (e) {
+      await Future.microtask(() {
+        _isLoading = false;
+        notifyListeners();
+      });
+      print('Error fetching shops: $e');
+    }
+  }
+
+  Future<void> fetchTotalDette(AuthProvider authProvider) async {
+    if (!authProvider.isAuthenticated) return;
+    
+    try {
+      final stats = await authProvider.getClientTotalDette();
+      
+      await Future.microtask(() {
+        _stats = stats;
+        notifyListeners();
+      });
+    } catch (e) {
+      print('Error fetching total dette: $e');
+    }
+  }
+
+  Future<void> fetchClients(AuthProvider authProvider) async {
+    if (!authProvider.isAuthenticated) return;
+    
+    await Future.microtask(() {
+      _isLoading = true;
+      notifyListeners();
+    });
+    
+    try {
+      final clients = await authProvider.getClients();
+      
+      await Future.microtask(() {
+        _clients = clients;
+        _isLoading = false;
+        notifyListeners();
+      });
+    } catch (e) {
+      await Future.microtask(() {
+        _isLoading = false;
+        notifyListeners();
+      });
+      print('Error fetching clients: $e');
+    }
+  }
+
+  void clearData() {
+    _shops = [];
+    _clients = [];
+    _stats = null;
     notifyListeners();
   }
 }
