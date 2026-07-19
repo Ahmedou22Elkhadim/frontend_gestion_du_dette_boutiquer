@@ -122,7 +122,7 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
 
   Future<void> _resendOTP() async {
     if (!_canResend || _isDisposed) return;
-    
+
     setState(() {
       _isVerifying = true;
     });
@@ -133,14 +133,24 @@ class _OTPVerificationScreenState extends State<OTPVerificationScreen> {
     }
     _focusNodes[0].requestFocus();
 
-    // TODO: Appeler l'API pour renvoyer l'OTP
-    _startResendTimer();
-    
-    if (mounted && !_isDisposed) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.resendOTP(widget.phoneNumber);
+
+    if (!mounted || _isDisposed) return;
+
+    if (success) {
+      _startResendTimer();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Nouveau code envoyé!'),
           backgroundColor: Colors.blue,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(authProvider.errorMessage ?? 'Échec du renvoi du code'),
+          backgroundColor: Colors.red,
         ),
       );
     }

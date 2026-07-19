@@ -1,5 +1,7 @@
 // providers/auth_provider.dart
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,9 +35,59 @@ class AuthProvider with ChangeNotifier {
     };
   }
 
-  // 🔥 Changer l'URL selon votre environnement
-  // static const String _baseUrl = 'http://10.0.2.2:8000'; // Android emulator
-  static const String _baseUrl = 'http://127.0.0.1:8000'; // iOS
+  /// Exécute une requête HTTP authentifiée et rafraîchit automatiquement le
+  /// token d'accès (une seule fois) si le serveur répond 401, avant de
+  /// réessayer la même requête. Centralise ce qui était géré au cas par cas
+  /// (ou pas du tout) dans chaque méthode d'appel API.
+  Future<http.Response> _authorizedRequest(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    bool isRetry = false,
+  }) async {
+    final uri = Uri.parse('$_baseUrl$path');
+    final headers = _authHeaders;
+    final encodedBody = body != null ? json.encode(body) : null;
+
+    http.Response response;
+    switch (method) {
+      case 'GET':
+        response = await http.get(uri, headers: headers);
+        break;
+      case 'POST':
+        response = await http.post(uri, headers: headers, body: encodedBody);
+        break;
+      case 'PATCH':
+        response = await http.patch(uri, headers: headers, body: encodedBody);
+        break;
+      case 'DELETE':
+        response = await http.delete(uri, headers: headers);
+        break;
+      default:
+        throw ArgumentError('Méthode HTTP non supportée: $method');
+    }
+
+    if (response.statusCode == 401 && !isRetry && _refreshToken != null) {
+      final refreshed = await refreshToken();
+      if (refreshed) {
+        return _authorizedRequest(method, path, body: body, isRetry: true);
+      }
+      logout();
+    }
+
+    return response;
+  }
+
+  // 🔥 URL du backend Django, adaptée automatiquement à la plateforme.
+  // - Android emulator ne peut pas joindre localhost de la machine hôte
+  //   directement : il faut passer par l'alias spécial 10.0.2.2.
+  // - iOS simulator, desktop et web utilisent le vrai localhost.
+  // À terme (déploiement réel), remplacer par l'URL du serveur de production.
+  static String get _baseUrl {
+    if (kIsWeb) return 'http://127.0.0.1:8000';
+    if (Platform.isAndroid) return 'http://10.0.2.2:8000';
+    return 'http://127.0.0.1:8000';
+  }
 
   // ==================== AUTHENTIFICATION ====================
   
@@ -152,6 +204,36 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> resendOTP(String phoneNumber) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/resend-otp/'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'phone_number': phoneNumber}),
+      );
+
+      _isLoading = false;
+      notifyListeners();
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        final errorData = json.decode(response.body);
+        _errorMessage = errorData['error'] ?? 'Erreur lors du renvoi du code';
+        return false;
+      }
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'Erreur lors du renvoi du code : $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> register(String name, String phone, String password, String role, String email) async {
     String username = phone;
     return await sendOTP(phone, username, email, password, role);
@@ -161,24 +243,11 @@ class AuthProvider with ChangeNotifier {
     if (_accessToken == null) return;
 
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/profile/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await _authorizedRequest('GET', '/api/profile/');
 
       if (response.statusCode == 200) {
         _userProfile = json.decode(response.body);
         notifyListeners();
-      } else if (response.statusCode == 401) {
-        final refreshed = await refreshToken();
-        if (refreshed) {
-          await getProfile();
-        } else {
-          logout();
-        }
       }
     } catch (e) {
       print('Error fetching profile: $e');
@@ -229,15 +298,9 @@ class AuthProvider with ChangeNotifier {
   
   Future<List<dynamic>> getClients() async {
     if (_accessToken == null) return [];
-    
+
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/clients/list/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await _authorizedRequest('GET', '/api/clients/list/');
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
@@ -251,15 +314,9 @@ class AuthProvider with ChangeNotifier {
 
   Future<Map<String, dynamic>?> getClientDetail(int clientId) async {
     if (_accessToken == null) return null;
-    
+
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/clients/$clientId/retrieve/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await _authorizedRequest('GET', '/api/clients/$clientId/retrieve/');
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
@@ -275,20 +332,14 @@ class AuthProvider with ChangeNotifier {
   
   Future<List<dynamic>> getDettes({int? clientId}) async {
     if (_accessToken == null) return [];
-    
+
     try {
-      String url = '$_baseUrl/api/dettes/';
+      String path = '/api/dettes/';
       if (clientId != null) {
-        url += '?client_id=$clientId';
+        path += '?client_id=$clientId';
       }
-      
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+
+      final response = await _authorizedRequest('GET', path);
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
@@ -312,20 +363,17 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/dettes/create/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
+      final response = await _authorizedRequest(
+        'POST',
+        '/api/dettes/create/',
+        body: {
           'client': clientId,
           'description': description,
           'montant': montant,
           'produit': produit,
           'quantite': quantite,
           'date_echeance': dateEcheance,
-        }),
+        },
       );
 
       _isLoading = false;
@@ -348,13 +396,10 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await http.put(
-        Uri.parse('$_baseUrl/api/dettes/$detteId/update/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(data),
+      final response = await _authorizedRequest(
+        'PATCH',
+        '/api/dettes/$detteId/update/',
+        body: data,
       );
 
       _isLoading = false;
@@ -373,13 +418,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await http.delete(
-        Uri.parse('$_baseUrl/api/dettes/$detteId/delete/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await _authorizedRequest('DELETE', '/api/dettes/$detteId/delete/');
 
       _isLoading = false;
       notifyListeners();
@@ -397,13 +436,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/dettes/$detteId/marquer-payee/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await _authorizedRequest('POST', '/api/dettes/$detteId/marquer-payee/');
 
       _isLoading = false;
       notifyListeners();
@@ -420,15 +453,9 @@ class AuthProvider with ChangeNotifier {
   
   Future<Map<String, dynamic>?> getClientTotalDette() async {
     if (_accessToken == null) return null;
-    
+
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/client/total-dette/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await _authorizedRequest('GET', '/api/client/total-dette/');
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
@@ -442,15 +469,9 @@ class AuthProvider with ChangeNotifier {
 
   Future<List<dynamic>> getClientBoutiques() async {
     if (_accessToken == null) return [];
-    
+
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/client/boutiques/'),
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await _authorizedRequest('GET', '/api/client/boutiques/');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -477,15 +498,15 @@ Future<bool> envoyerDemandeAjout(String clientPhone, {String adresse = '', Strin
     print('=== ENVOI DEMANDE AJOUT ===');
     print('URL: $_baseUrl/api/demandes/ajout/');
     print('Client Phone: $clientPhone');
-    
-    final response = await http.post(
-      Uri.parse('$_baseUrl/api/demandes/ajout/'),
-      headers: _authHeaders,
-      body: json.encode({
+
+    final response = await _authorizedRequest(
+      'POST',
+      '/api/demandes/ajout/',
+      body: {
         'telephone': clientPhone,
         'adresse': adresse,
         'message': message,
-      }),
+      },
     );
 
     print('Response status: ${response.statusCode}');
@@ -592,13 +613,11 @@ Future<bool> envoyerDemandeSuppression(int clientId) async {
     print('=== ENVOI DEMANDE SUPPRESSION ===');
     print('URL: $_baseUrl/api/demandes/suppression/');
     print('Client ID: $clientId');
-    
-    final response = await http.post(
-      Uri.parse('$_baseUrl/api/demandes/suppression/'),
-      headers: _authHeaders,
-      body: json.encode({
-        'client_id': clientId,
-      }),
+
+    final response = await _authorizedRequest(
+      'POST',
+      '/api/demandes/suppression/',
+      body: {'client_id': clientId},
     );
 
     print('Response status: ${response.statusCode}');
@@ -649,12 +668,9 @@ Future<bool> envoyerDemandeSuppression(int clientId) async {
 // Ajoutez aussi cette méthode pour que le client puisse voir ses demandes
 Future<List<dynamic>> getClientDemandes() async {
   if (_accessToken == null) return [];
-  
+
   try {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/api/demandes/client/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('GET', '/api/demandes/client/');
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -669,12 +685,9 @@ Future<List<dynamic>> getClientDemandes() async {
 // 🔥 NOUVEAU : Récupérer l'historique complet des demandes (acceptées, refusées, en attente)
 Future<List<dynamic>> getClientDemandesHistorique() async {
   if (_accessToken == null) return [];
-  
+
   try {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/api/demandes/client/historique/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('GET', '/api/demandes/client/historique/');
 
     print('📋 getClientDemandesHistorique - Status: ${response.statusCode}');
     print('📋 getClientDemandesHistorique - Body: ${response.body}');
@@ -694,19 +707,16 @@ Future<bool> repondreDemande(int demandeId, bool accepter) async {
   notifyListeners();
 
   try {
-    final String endpoint = accepter 
-        ? '$_baseUrl/api/demandes/$demandeId/accepter/'
-        : '$_baseUrl/api/demandes/$demandeId/refuser/';
-    
+    final String path = accepter
+        ? '/api/demandes/$demandeId/accepter/'
+        : '/api/demandes/$demandeId/refuser/';
+
     print('=== RÉPONSE DEMANDE ===');
-    print('URL: $endpoint');
+    print('URL: $_baseUrl$path');
     print('Demande ID: $demandeId');
     print('Accepter: $accepter');
-    
-    final response = await http.post(
-      Uri.parse(endpoint),
-      headers: _authHeaders,
-    );
+
+    final response = await _authorizedRequest('POST', path);
 
     print('Response status: ${response.statusCode}');
     print('Response body: ${response.body}');
@@ -741,24 +751,15 @@ Future<bool> repondreDemande(int demandeId, bool accepter) async {
 // providers/auth_provider.dart - Méthode getDemandesBoutiquier améliorée
 Future<List<dynamic>> getDemandesBoutiquier() async {
   if (_accessToken == null) return [];
-  
+
   try {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/api/demandes/boutiquier/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('GET', '/api/demandes/boutiquier/');
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else if (response.statusCode == 401) {
-      // Token expiré
-      final refreshed = await refreshToken();
-      if (refreshed) {
-        return getDemandesBoutiquier(); // Réessayer
-      } else {
-        logout();
-        throw Exception('Session expirée. Veuillez vous reconnecter.');
-      }
+      // Le rafraîchissement automatique (voir _authorizedRequest) a aussi échoué.
+      throw Exception('Session expirée. Veuillez vous reconnecter.');
     } else {
       // Erreur serveur
       try {
@@ -786,12 +787,9 @@ Future<List<dynamic>> getDemandesBoutiquier() async {
 // Récupérer toutes les notifications du boutiquier
 Future<List<dynamic>> getNotifications() async {
   if (_accessToken == null) return [];
-  
+
   try {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/api/notifications/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('GET', '/api/notifications/');
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -806,12 +804,9 @@ Future<List<dynamic>> getNotifications() async {
 // Compter les notifications non lues
 Future<int> getNotificationsNonLues() async {
   if (_accessToken == null) return 0;
-  
+
   try {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/api/notifications/non-lues/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('GET', '/api/notifications/non-lues/');
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -827,10 +822,7 @@ Future<int> getNotificationsNonLues() async {
 // Marquer une notification comme lue
 Future<bool> marquerNotificationLue(int notificationId) async {
   try {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/api/notifications/$notificationId/lire/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('POST', '/api/notifications/$notificationId/lire/');
     return response.statusCode == 200;
   } catch (e) {
     print('Error marking notification as read: $e');
@@ -841,10 +833,7 @@ Future<bool> marquerNotificationLue(int notificationId) async {
 // Marquer toutes les notifications comme lues
 Future<bool> marquerToutesNotificationsLues() async {
   try {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/api/notifications/lire-toutes/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('POST', '/api/notifications/lire-toutes/');
     return response.statusCode == 200;
   } catch (e) {
     print('Error marking all as read: $e');
@@ -898,12 +887,9 @@ Future<bool> marquerToutesNotificationsLues() async {
   // providers/auth_provider.dart
 Future<Map<String, dynamic>?> getClientDettes() async {
   if (_accessToken == null) return null;
-  
+
   try {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/api/client/dettes/'),
-      headers: _authHeaders,
-    );
+    final response = await _authorizedRequest('GET', '/api/client/dettes/');
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -922,13 +908,13 @@ Future<bool> changePassword(String currentPassword, String newPassword) async {
   notifyListeners();
 
   try {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/api/change-password/'),
-      headers: _authHeaders,
-      body: json.encode({
+    final response = await _authorizedRequest(
+      'POST',
+      '/api/change-password/',
+      body: {
         'current_password': currentPassword,
         'new_password': newPassword,
-      }),
+      },
     );
 
     _isLoading = false;
